@@ -1,0 +1,49 @@
+{
+  "user": {
+    "id": "user_001",
+    "name": "Fold Studio Team",
+    "email": "alex@foldstudio.com",
+    "company": "Fold Studio Inc.",
+    "plan": "pro",
+    "subscription_status": "active",
+    "subscription_id": "sub_ppe_MT_1790575198091_381",
+    "payment_provider": "phonepe",
+    "billing_cycle": "monthly",
+    "subscription_start": "2026-09-28",
+    "subscription_end": "2026-10-28",
+    "next_billing_date": "2026-10-28",
+    "payment_customer_id": "cust_ppe_1790575199600",
+    "amount_paid": 1499,
+    "hasSeenOnboarding": true,
+    "usage": {
+      "datasetsCount": 1,
+      "aiQueriesCount": 2,
+      "pdfReportsCount": 0,
+      "forecastsCount": 0
+    }
+  },
+  "transactions": [
+    {
+      "id": "txn_ppe_MT_1790575198091_381",
+      "date": "2026-09-28",
+      "planName": "Pro",
+      "amount": 1499,
+      "currency": "₹",
+      "billingCycle": "monthly",
+      "status": "Paid",
+      "paymentProvider": "PhonePe",
+      "receiptUrl": "#receipt-MT_1790575198091_381"
+    },
+    {
+      "id": "txn_init_001",
+      "date": "2026-09-27",
+      "planName": "Free Trial",
+      "amount": 0,
+      "currency": "₹",
+      "billingCycle": "monthly",
+      "status": "Paid",
+      "paymentProvider": "system",
+      "receiptUrl": "#"
+    }
+  ]
+}

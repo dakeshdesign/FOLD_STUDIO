@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Plus+Jakarta+Sans:ital,wght@0,300..700;1,300..700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-main: #F5F3EE;
+    --text-primary: #202020;
+    --border-subtle: #E5E2DA;
+  }
+
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, .font-display, .font-serif {
+    font-family: 'Bodoni Moda', Didot, 'Bodoni MT', Bodoni, Georgia, serif !important;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Editorial Large Background Outline Typography */
+.text-stroke-bg {
+  -webkit-text-stroke: 1px #E5E2DA;
+  color: transparent;
+  font-family: 'Bodoni Moda', Didot, Georgia, serif !important;
+}
+
+.text-stroke-dark {
+  -webkit-text-stroke: 1px #202020;
+  color: transparent;
+  font-family: 'Bodoni Moda', Didot, Georgia, serif !important;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #F5F3EE;
+}
+::-webkit-scrollbar-thumb {
+  background: #D8D5CC;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #202020;
+}
+
+/* Image Subtle Hover Zoom & Masking */
+.img-zoom {
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.img-zoom:hover {
+  transform: scale(1.02);
+}
+
