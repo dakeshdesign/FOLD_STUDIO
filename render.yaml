@@ -3,8 +3,28 @@ services:
     name: fold-studio
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    # --include=dev: tsc and vite are devDependencies and NODE_ENV=production would skip them
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      # Secrets: set these in the Render dashboard (sync: false keeps them out of this file)
+      - key: DATABASE_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_TO
+        value: enquiryfoldstudio@gmail.com
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: APP_BASE_URL
+        sync: false
+      - key: SEND_CLIENT_CONFIRMATION
+        value: "false"

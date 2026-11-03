@@ -1,23 +1,20 @@
 /**
- * FOLD STUDIO — Email & Inquiry Form Configuration
+ * FOLD STUDIO — Inquiry Form Configuration
  *
- * For Static Hosting (Vercel, Netlify, GitHub Pages):
- * 1. Go to https://web3forms.com
- * 2. Enter your email (enquiryfoldstudio@gmail.com) and click "Create Access Key"
- * 3. Copy the key and set it in your .env file as VITE_WEB3FORMS_ACCESS_KEY
- *    or replace 'YOUR_WEB3FORMS_ACCESS_KEY' below.
+ * The START A PROJECT form posts to the FOLD backend (server/inquiries), which saves
+ * the inquiry and emails it to the studio inbox. No email credentials live in the browser.
+ *
+ * If the frontend is hosted separately from the Express server (e.g. Netlify/Vercel),
+ * set VITE_API_BASE_URL to the backend's public URL including /api,
+ * e.g. https://fold-studio.onrender.com/api
  */
 
-export const EMAIL_CONFIG = {
-  // Web3Forms access key from https://web3forms.com
-  WEB3FORMS_ACCESS_KEY: ((import.meta as any).env?.VITE_WEB3FORMS_ACCESS_KEY as string) || 'YOUR_WEB3FORMS_ACCESS_KEY',
-  
-  // Web3Forms submission endpoint (JSON)
-  WEB3FORMS_ENDPOINT: 'https://api.web3forms.com/submit',
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') || '/api';
 
-  // Official inquiry email recipient
+export const EMAIL_CONFIG = {
+  // Official inquiry email recipient (shown to visitors as a direct-email fallback)
   RECIPIENT_EMAIL: 'enquiryfoldstudio@gmail.com',
 
-  // Local/Fullstack backend inquiry endpoint
-  BACKEND_ENDPOINT: '/api/inquiry',
+  // Backend inquiry endpoint
+  BACKEND_ENDPOINT: `${API_BASE}/inquiries`,
 };

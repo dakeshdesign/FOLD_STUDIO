@@ -1,7 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowRight, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { EMAIL_CONFIG } from '../config/emailConfig';
+import { snapshotElement, playPaper, getLastPointer, prefersReducedMotion } from '../utils/paperCrumple';
+import {
+  SERVICES,
+  BUDGETS,
+  LIMITS,
+  toggleService,
+  validateInquiryFields,
+  buildInquiryPayload,
+  newIdempotencyKey,
+  type FormErrors,
+} from '../utils/inquiryForm';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -9,17 +20,17 @@ interface ProjectModalProps {
   initialService?: string;
 }
 
-export interface FormErrors {
-  name?: string;
-  email?: string;
-  services?: string;
-  budget?: string;
-}
+export type { FormErrors };
+
+const NETWORK_ERROR_MESSAGE = "We couldn't submit your inquiry. Please try again.";
 
 export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, initialService }) => {
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [apiErrorMessage, setApiErrorMessage] = useState<string>('');
   const [submittedName, setSubmittedName] = useState<string>('');
+  const [formError, setFormError] = useState<string>('');
+  // One key per inquiry attempt: retries reuse it so the server never stores a duplicate.
+  const idempotencyKeyRef = useRef<string>(newIdempotencyKey());
 
   const [formData, setFormData] = useState({
     name: '',
@@ -32,6 +43,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
 
   const [errors, setErrors] = useState<FormErrors>({});
 
+  // The summary notice only describes the last submit attempt; editing the form clears it.
+  useEffect(() => {
+    setFormError('');
+  }, [formData]);
+
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -41,23 +57,48 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
   const firstBudgetBtnRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
 
-  const availableServices = [
-    'Brand Identity',
-    'Website Design',
-    'Digital Experiences',
-    'Content Creation',
-    'Creative Direction',
-    'Full Retainer',
-  ];
+  // Paper transition: the form unfolds out of a crumpled ball and crushes back into one on close
+  const [revealed, setRevealed] = useState<boolean>(false);
+  const [closing, setClosing] = useState<boolean>(false);
+  const closingRef = useRef<boolean>(false);
 
-  const budgetOptions = [
-    '₹5,000–₹10,000',
-    '₹10,000–₹25,000',
-    '₹25,000–₹50,000',
-    '₹50,000–₹1,00,000',
-    '₹1,00,000+',
-    'Not Sure Yet',
-  ];
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    closingRef.current = false;
+    setClosing(false);
+    setRevealed(false);
+    let cancelled = false;
+    const origin = getLastPointer();
+    const reveal = () => {
+      if (cancelled) return;
+      setRevealed(true);
+      nameInputRef.current?.focus({ preventScroll: true });
+    };
+    (document.fonts?.ready ?? Promise.resolve()).then(() =>
+      requestAnimationFrame(() => {
+        const el = modalRef.current;
+        if (cancelled || !el) return;
+        if (prefersReducedMotion()) return reveal();
+        const ok = playPaper({ rect: el.getBoundingClientRect(), texture: snapshotElement(el), mode: 'unfold', origin, onDone: reveal });
+        if (!ok) reveal();
+      })
+    );
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+  const closeWithCrumple = (after: () => void) => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    const el = modalRef.current;
+    if (!el || prefersReducedMotion()) { after(); return; }
+    const ok = playPaper({ rect: el.getBoundingClientRect(), texture: snapshotElement(el), mode: 'crumple', onDone: after });
+    if (ok) setRevealed(false);
+    else after();
+  };
+
+  const availableServices = SERVICES;
+  const budgetOptions = BUDGETS;
 
   // Sync initial service prop (case-insensitive matching)
   useEffect(() => {
@@ -79,11 +120,6 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
     if (isOpen) {
       triggerRef.current = document.activeElement as HTMLElement;
       document.body.style.overflow = 'hidden';
-
-      // Auto-focus first input field after animation
-      const focusTimer = setTimeout(() => {
-        nameInputRef.current?.focus();
-      }, 100);
 
       const handleKeyDown = (e: KeyboardEvent) => {
         // Escape closes the modal
@@ -120,7 +156,6 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
       window.addEventListener('keydown', handleKeyDown);
 
       return () => {
-        clearTimeout(focusTimer);
         window.removeEventListener('keydown', handleKeyDown);
         document.body.style.overflow = '';
         triggerRef.current?.focus();
@@ -132,10 +167,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
 
   const handleServiceToggle = (service: string) => {
     setFormData((prev) => {
-      const isSelected = prev.services.includes(service);
-      const updated = isSelected
-        ? prev.services.filter((s) => s !== service)
-        : [...prev.services, service];
+      const updated = toggleService(prev.services, service);
 
       if (updated.length > 0 && errors.services) {
         setErrors((e) => ({ ...e, services: undefined }));
@@ -153,28 +185,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
   };
 
   const validateForm = (): boolean => {
-    const newErrors: FormErrors = {};
-    const trimmedName = formData.name.trim();
-    const trimmedEmail = formData.email.trim();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!trimmedName || trimmedName.length < 2) {
-      newErrors.name = 'Please enter your name (minimum 2 characters).';
-    }
-
-    if (!trimmedEmail) {
-      newErrors.email = 'Please enter your work email address.';
-    } else if (!emailRegex.test(trimmedEmail)) {
-      newErrors.email = 'Please enter a valid work email address (e.g. name@brand.com).';
-    }
-
-    if (formData.services.length === 0) {
-      newErrors.services = 'Please select at least one required service.';
-    }
-
-    if (!formData.budget) {
-      newErrors.budget = 'Please select an estimated budget range.';
-    }
+    const newErrors: FormErrors = validateInquiryFields(formData);
 
     setErrors(newErrors);
 
@@ -193,7 +204,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
       firstBudgetBtnRef.current?.focus();
     }
 
-    return Object.keys(newErrors).length === 0;
+    const valid = Object.keys(newErrors).length === 0;
+    setFormError(valid ? '' : 'Please complete the required fields.');
+    return valid;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -216,93 +229,45 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
 
     setStatus('submitting');
     setApiErrorMessage('');
+    setFormError('');
     const clientName = formData.name.trim();
     setSubmittedName(clientName);
 
-    const servicesString = formData.services.join(', ');
-    const emailSubject = `New Project Inquiry from ${clientName} — FOLD`;
-
     try {
-      let success = false;
-      let errorMessage = '';
+      const response = await fetch(EMAIL_CONFIG.BACKEND_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ ...buildInquiryPayload(formData, idempotencyKeyRef.current), honeypot: formData.honeypot }),
+      });
+      const data = await response.json().catch(() => ({}));
 
-      const hasWeb3Key =
-        EMAIL_CONFIG.WEB3FORMS_ACCESS_KEY &&
-        EMAIL_CONFIG.WEB3FORMS_ACCESS_KEY !== 'YOUR_WEB3FORMS_ACCESS_KEY' &&
-        EMAIL_CONFIG.WEB3FORMS_ACCESS_KEY.trim() !== '';
-
-      if (hasWeb3Key) {
-        // Direct Web3Forms submission (works seamlessly on static sites)
-        const web3Payload = {
-          access_key: EMAIL_CONFIG.WEB3FORMS_ACCESS_KEY,
-          name: clientName,
-          email: formData.email.trim(),
-          replyto: formData.email.trim(),
-          subject: emailSubject,
-          services: servicesString,
-          budget: formData.budget,
-          brief: formData.details.trim(),
-          botcheck: formData.honeypot,
-        };
-
-        const response = await fetch(EMAIL_CONFIG.WEB3FORMS_ENDPOINT, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify(web3Payload),
-        });
-
-        const data = await response.json();
-        if (response.ok && (data.success || data.status === 200)) {
-          success = true;
-        } else {
-          errorMessage = data.message || 'Web3Forms submission failed.';
-        }
-      } else {
-        // Fullstack backend submission (Express + Nodemailer)
-        const backendPayload = {
-          name: clientName,
-          email: formData.email.trim(),
-          services: formData.services,
-          budget: formData.budget,
-          brief: formData.details.trim(),
-          honeypot: formData.honeypot,
-        };
-
-        const response = await fetch(EMAIL_CONFIG.BACKEND_ENDPOINT, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(backendPayload),
-        });
-
-        const data = await response.json();
-        if (response.ok && data.success) {
-          success = true;
-        } else {
-          errorMessage = data.message || 'Inquiry delivery failed.';
-        }
-      }
-
-      if (success) {
+      if (response.ok && data.success) {
         setStatus('success');
         resetFormData();
-      } else {
-        setStatus('error');
-        setApiErrorMessage(
-          errorMessage ||
-            `Something went wrong. Please email us directly at ${EMAIL_CONFIG.RECIPIENT_EMAIL}`
-        );
+        return;
       }
+
+      if (response.status === 422 && data.errors) {
+        // Server-side validation: back to the form with the typed values intact.
+        const fieldErrors: FormErrors = {};
+        for (const key of ['name', 'email', 'services', 'budget'] as const) {
+          if (typeof data.errors[key] === 'string') fieldErrors[key] = data.errors[key];
+        }
+        if (typeof data.errors.projectBrief === 'string') fieldErrors.details = data.errors.projectBrief;
+        setErrors(fieldErrors);
+        setFormError('Please complete the required fields.');
+        setStatus('idle');
+        return;
+      }
+
+      setStatus('error');
+      setApiErrorMessage(
+        response.status === 429 ? 'Too many submissions. Please wait a few minutes and try again.' : NETWORK_ERROR_MESSAGE
+      );
     } catch (error) {
       console.error('Inquiry Submission Error:', error);
       setStatus('error');
-      setApiErrorMessage(
-        `Something went wrong. Please email us directly at ${EMAIL_CONFIG.RECIPIENT_EMAIL}`
-      );
+      setApiErrorMessage(NETWORK_ERROR_MESSAGE);
     }
   };
 
@@ -316,17 +281,21 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
       honeypot: '',
     });
     setErrors({});
+    setFormError('');
+    idempotencyKeyRef.current = newIdempotencyKey();
   };
 
   const handleClose = () => {
-    onClose();
+    closeWithCrumple(onClose);
   };
 
   const resetFormAndClose = () => {
-    setStatus('idle');
-    resetFormData();
-    setApiErrorMessage('');
-    onClose();
+    closeWithCrumple(() => {
+      setStatus('idle');
+      resetFormData();
+      setApiErrorMessage('');
+      onClose();
+    });
   };
 
   if (!isOpen) return null;
@@ -342,9 +311,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
         {/* Dark translucent backdrop with blur */}
         <motion.div
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
+          animate={{ opacity: closing ? 0 : 1 }}
+          transition={closing ? { duration: 0.25, delay: 0.3 } : { duration: 0.2 }}
           className="fixed inset-0 bg-black/65 backdrop-blur-xs cursor-pointer"
           onClick={handleClose}
         />
@@ -352,10 +320,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
         {/* Modal Container */}
         <motion.div
           ref={modalRef}
-          initial={{ opacity: 0, scale: 0.96, y: 16 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96, y: 16 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: revealed ? 1 : 0 }}
+          transition={{ duration: 0 }}
+          style={{ pointerEvents: revealed ? 'auto' : 'none' }}
           className="relative z-10 w-full max-w-3xl bg-[#F5F3EE] border border-[#E5E2DA] p-6 sm:p-10 md:p-12 text-[#202020] shadow-2xl my-auto max-h-[90vh] overflow-y-auto rounded-none"
         >
           {/* Header Bar */}
@@ -430,6 +398,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
                     aria-invalid={!!errors.name}
                     aria-describedby={errors.name ? 'name-error' : undefined}
                     placeholder="Alex Morgan"
+                    maxLength={LIMITS.nameMax}
                     value={formData.name}
                     onChange={(e) => {
                       setFormData({ ...formData, name: e.target.value });
@@ -468,6 +437,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
                     aria-invalid={!!errors.email}
                     aria-describedby={errors.email ? 'email-error' : undefined}
                     placeholder="alex@brand.com"
+                    maxLength={LIMITS.emailMax}
+                    autoComplete="email"
                     value={formData.email}
                     onChange={(e) => {
                       setFormData({ ...formData, email: e.target.value });
@@ -591,11 +562,37 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
                   id="inquiry-brief"
                   rows={4}
                   placeholder="Share details regarding objectives, timeline, deliverables, or brand context..."
+                  maxLength={LIMITS.briefMax}
+                  aria-invalid={!!errors.details}
+                  aria-describedby={errors.details ? 'brief-error' : undefined}
                   value={formData.details}
-                  onChange={(e) => setFormData({ ...formData, details: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, details: e.target.value });
+                    if (errors.details) setErrors((err) => ({ ...err, details: undefined }));
+                  }}
                   className="w-full bg-white border border-[#E5E2DA] px-4 py-3.5 text-xs text-[#202020] focus:outline-none focus:border-[#202020] resize-none leading-relaxed transition-colors"
                 />
+                {errors.details && (
+                  <p
+                    id="brief-error"
+                    role="alert"
+                    className="font-mono text-[10px] text-[#D9381E] uppercase tracking-wider flex items-center space-x-1"
+                  >
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>{errors.details}</span>
+                  </p>
+                )}
               </div>
+
+              {formError && (
+                <p
+                  role="alert"
+                  className="font-mono text-[10px] text-[#D9381E] uppercase tracking-wider flex items-center space-x-1"
+                >
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  <span>{formError}</span>
+                </p>
+              )}
 
               {/* Submit Button */}
               <button
@@ -610,7 +607,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
                 {status === 'submitting' ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                    <span>SENDING...</span>
+                    <span>SENDING INQUIRY...</span>
                   </>
                 ) : (
                   <>
@@ -636,10 +633,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, ini
                   INQUIRY // RECEIVED
                 </span>
                 <h3 className="font-serif text-3xl sm:text-4xl font-normal text-[#202020]">
-                  THANK YOU, {submittedName.toUpperCase()}.
+                  THANK YOU{submittedName ? `, ${submittedName.toUpperCase()}` : ''}!
                 </h3>
                 <p className="font-sans text-xs sm:text-sm text-[#555555] uppercase tracking-widest leading-relaxed font-light pt-2">
-                  WE'VE RECEIVED YOUR INQUIRY AND WILL REPLY WITHIN 24–48 HOURS.
+                  YOUR INQUIRY HAS BEEN RECEIVED. OUR TEAM WILL REVIEW YOUR PROJECT DETAILS AND GET IN TOUCH.
                 </p>
               </div>
 

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>FOLD Inquiries</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <header class="bar">
+    <span class="mono">FOLD STUDIO // INQUIRIES</span>
+    <button id="logout" class="ghost" hidden>LOCK</button>
+  </header>
+
+  <main>
+    <section id="login" class="card narrow">
+      <h1>Staff sign-in</h1>
+      <p class="muted">Enter the admin token configured on the server (ADMIN_TOKEN). It is kept only for this browser tab.</p>
+      <form id="login-form">
+        <label class="mono" for="staff-name">YOUR NAME (FOR THE ACTIVITY LOG)</label>
+        <input id="staff-name" autocomplete="name" maxlength="40" required>
+        <label class="mono" for="token">ADMIN TOKEN</label>
+        <input id="token" type="password" autocomplete="current-password" required>
+        <button type="submit">UNLOCK</button>
+        <p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="app" hidden>
+      <div id="warnings"></div>
+      <div id="stats" class="stats"></div>
+      <div class="layout">
+        <div class="card list-card">
+          <div class="row">
+            <label class="mono" for="filter">STATUS</label>
+            <select id="filter"><option value="">All</option></select>
+            <button id="refresh" class="ghost">REFRESH</button>
+          </div>
+          <ul id="list" class="list"></ul>
+        </div>
+        <div id="detail" class="card detail">
+          <p class="muted">Select an inquiry.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="admin.js"></script>
+</body>
+</html>

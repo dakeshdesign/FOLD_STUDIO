@@ -80,3 +80,4 @@ database/*.sqlite
 
 # Mac OS files
 .DS_Store
+server/inquiries.local.db*
