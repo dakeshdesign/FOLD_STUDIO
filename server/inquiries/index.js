@@ -18,7 +18,20 @@ export const setupInquiries = async (app, { env = process.env, logger = console 
     return null;
   }
 
-  const db = await createDb(config.databaseUrl);
+  let db;
+  try {
+    db = await createDb(config.databaseUrl);
+  } catch (err) {
+    // Keep the website up; only the inquiry endpoints are unavailable until the database is fixed.
+    logger.error(`[inquiries] database connection failed (${err.code || 'error'}): ${err.message}. Inquiry endpoints are disabled.`);
+    if (err.code === 'SELF_SIGNED_CERT_IN_CHAIN') {
+      logger.error('[inquiries] Set DATABASE_CA_CERT to your database provider\'s CA certificate (Supabase → Database → SSL Configuration).');
+    }
+    app.all(['/api/inquiries', '/api/inquiry', '/api/admin/*', '/api/cron/inquiries', '/api/webhooks/resend'], (req, res) =>
+      res.status(503).json({ success: false, message: "We couldn't submit your inquiry. Please try again." })
+    );
+    return null;
+  }
   const provider = config.email.provider === 'resend'
     ? createResendProvider({ apiKey: config.email.resendApiKey, from: config.email.from })
     : createUnconfiguredProvider();

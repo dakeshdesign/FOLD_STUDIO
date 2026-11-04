@@ -85,12 +85,28 @@ const normaliseRow = (row) => {
   return out;
 };
 
+// TLS for PostgreSQL. Supabase signs its server certificates with its own CA, which Node does not
+// trust by default: put that CA (Supabase → Database → SSL Configuration → Download certificate)
+// in DATABASE_CA_CERT so the server certificate can be verified.
+// An sslmode in the URL would override these options inside pg, so it is removed here.
+export const pgConnectionOptions = (connectionString, env = {}) => {
+  const url = new URL(connectionString);
+  const sslmode = url.searchParams.get('sslmode');
+  url.searchParams.delete('sslmode');
+  const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname);
+  let ssl;
+  if (sslmode === 'disable' || (local && !sslmode)) ssl = false;
+  else if (env.DATABASE_CA_CERT) ssl = { ca: env.DATABASE_CA_CERT.replace(/\\n/g, '\n'), rejectUnauthorized: true };
+  else ssl = { rejectUnauthorized: env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' };
+  return { connectionString: url.toString(), ssl };
+};
+
 const createPgDb = async (connectionString) => {
   const { default: pg } = await import('pg');
-  const ssl = /sslmode=disable/.test(connectionString) || /@(localhost|127\.0\.0\.1)/.test(connectionString)
-    ? false
-    : { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' };
-  const pool = new pg.Pool({ connectionString, ssl, max: Number(process.env.DATABASE_POOL_MAX) || 5 });
+  const pool = new pg.Pool({
+    ...pgConnectionOptions(connectionString, process.env),
+    max: Number(process.env.DATABASE_POOL_MAX) || 5,
+  });
   pool.on('error', (err) => console.error('[inquiries/db] idle client error:', err.message));
   await pool.query(PG_SCHEMA);
   return {

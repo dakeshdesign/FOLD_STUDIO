@@ -68,7 +68,9 @@ Production needs PostgreSQL (the host's disk is wiped on redeploy, so SQLite is 
 - **Neon** → Connection string
 - Render Postgres (free instances expire; use a paid plan if you choose this)
 
-Set `DATABASE_URL=postgres://...`. Tables are created automatically on first start. Enable the
+Set `DATABASE_URL=postgres://...`. For Supabase also download the CA certificate (Database → SSL
+Configuration → Download certificate) and paste its full contents into `DATABASE_CA_CERT`; without it
+the connection fails with `SELF_SIGNED_CERT_IN_CHAIN`. Tables are created automatically on first start. Enable the
 provider's daily backups. Use a database user that only has access to this database.
 
 ## 3. Environment variables
@@ -76,6 +78,7 @@ provider's daily backups. Use a database user that only has access to this datab
 | Variable | Where | Notes |
 |---|---|---|
 | `DATABASE_URL` | Prod | PostgreSQL URL (required in production) |
+| `DATABASE_CA_CERT` | Prod | Database CA certificate (PEM); required for Supabase |
 | `RESEND_API_KEY` | Prod | Sending-access key |
 | `EMAIL_FROM` | Prod | Verified sender (see above) |
 | `EMAIL_TO` | Prod | `enquiryfoldstudio@gmail.com` |

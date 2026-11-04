@@ -13,6 +13,8 @@ services:
       # Secrets: set these in the Render dashboard (sync: false keeps them out of this file)
       - key: DATABASE_URL
         sync: false
+      - key: DATABASE_CA_CERT
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
